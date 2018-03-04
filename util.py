@@ -1,22 +1,24 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
-n_obj_func = 90
-n_data_points = 100
-dim = 3
-l2 = 0.0005
 range_of_means = 10.0
 range_of_stds = 10.0
 
-def generate_data_points(number_of_data_points, parameters_pos, parameters_neg):
+
+def generate_data_points(train_data_points, test_data_points, dim, parameters_pos, parameters_neg):
+    """
+    For a specific parameter set, samples points from two gaussians, 
+    and assigns label 0 or 1 according to which one the data came from.
+    """
     mean_pos, std_pos = parameters_pos
     mean_neg, std_neg = parameters_neg
-    
+
     # use diagonal covariance
     cov_pos = std_pos**2 * np.eye(len(std_pos))
     cov_neg = std_neg**2 * np.eye(len(std_neg))
 
-    size = number_of_data_points // 2
-    
+    size = (train_data_points + test_data_points) // 2
+
     data_pos = np.random.multivariate_normal(mean_pos, cov_pos, size)
     data_neg = np.random.multivariate_normal(mean_neg, cov_neg, size)
 
@@ -24,13 +26,17 @@ def generate_data_points(number_of_data_points, parameters_pos, parameters_neg):
     data_neg = np.concatenate((data_neg, np.zeros((size, 1))), axis=1)
 
     data = np.concatenate((data_pos, data_neg), axis=0)
-    
-    np.random.shuffle(data)
-    
-    return data[:, :dim], data[:, dim:]
-        
 
-def generate_data_sets():
+    np.random.shuffle(data)
+
+    return data[:train_data_points, :dim], data[:train_data_points, dim:], data[train_data_points:, :dim], data[train_data_points:, dim:]
+
+
+def generate_data_sets(dim, n_obj_func, train_data_points, test_data_points):
+    """
+    Generates train and test dataset for @n_obj_func functions.
+    Returns a list of tuples of (train_x, train_y, test_x, test_y).
+    """
     # sample means of objective functions from 0-mean uniform random dist.
     means_pos = (np.random.rand(n_obj_func, dim) - 0.5) * range_of_means
     means_neg = (np.random.rand(n_obj_func, dim) - 0.5) * range_of_means
@@ -39,8 +45,17 @@ def generate_data_sets():
 
     data = list()
     for i in range(n_obj_func):
-        data.append(generate_data_points(n_data_points, (means_pos[i], stds_pos[i]), (means_neg[i], stds_neg[i])))
+        data.append(generate_data_points(train_data_points, test_data_points, dim,
+                                         (means_pos[i], stds_pos[i]), (means_neg[i], stds_neg[i])))
 
     return data
 
-generate_data_sets()
+
+def tsplot(ax, data, **kw):
+    x = np.arange(data.shape[1])
+    est = np.mean(data, axis=0)
+    sd = np.std(data, axis=0)
+    cis = (est - sd, est + sd)
+    ax.fill_between(x, cis[0], cis[1], alpha=0.2, **kw)
+    ax.plot(x, est, **kw)
+    ax.margins(x=0)
