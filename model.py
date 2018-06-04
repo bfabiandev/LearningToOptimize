@@ -4,14 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Parameters
-n_obj_func = 90
-train_data_points = 100
-test_data_points = 100
-dim = 3
+n_obj_func = 10
+train_data_points = 1000
+test_data_points = 1000
+dim = 10
 l2 = 0.0005
 learning_rate = 0.01
 momentum = 0.9
-training_epochs = 100
+training_epochs = 1000
 display_step = 100
 
 
@@ -21,15 +21,14 @@ def run_linear_regression_experiment(optimizers, data):
     y = tf.placeholder(tf.float32, [None, 1])
 
     # Set model weights
-    W = tf.Variable(tf.zeros([dim, 1]))
-    b = tf.Variable(tf.zeros([1]))
+    W = tf.get_variable("W", shape=[dim, 1], initializer=tf.glorot_normal_initializer())
+    b = tf.get_variable("b", shape=[1], initializer=tf.zeros_initializer())
 
     # Construct model
     pred = tf.nn.sigmoid(tf.matmul(x, W) + b)
 
     # Minimize error using cross entropy
-    unregularized_cost = tf.reduce_mean(-tf.reduce_sum(
-        y*tf.log(pred) + (1.0 - y) * tf.log(1.0 - pred), reduction_indices=1))
+    unregularized_cost = tf.losses.sigmoid_cross_entropy(logits=pred, multi_class_labels=y)
 
     l2_loss = l2 * tf.nn.l2_loss(W)
 
@@ -83,6 +82,8 @@ def run_linear_regression_experiment(optimizers, data):
                         c = sess.run(cost, feed_dict={
                                      x: train_x, y: train_y})
 
+                    #print(sess.run([W]))
+
                     # Compute average loss
                     avg_cost += c / len(train_x)
 
@@ -112,9 +113,6 @@ def main():
     optimizers = ['gradient_descent', 'momentum', 'lbfgs']
 
     lr_losses = run_linear_regression_experiment(optimizers, data)
-
-    nans = np.isnan(lr_losses)
-    lr_losses[nans] = 1.
 
     from scipy import stats
     print(stats.describe(lr_losses, axis=None))
