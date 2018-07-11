@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 
-
 class MnistModel(nn.Module):
 
     def __init__(self):
@@ -27,5 +26,6 @@ class LinearRegressionModel(nn.Module):
         self.linear1 = nn.Linear(dim, 1)
 
     def forward(self, inputs):
-        x = inputs.view(-1, self.dim)
+        x = inputs.view(-1, self.dim).float()
         return F.sigmoid(self.linear1(x))
+        
