@@ -12,6 +12,7 @@ from layer_norm_lstm import LayerNormLSTMCell
 from layer_norm import LayerNorm1D
 import random
 
+
 class MetaOptimizer(nn.Module):
 
     def __init__(self, model, num_layers, hidden_size):
@@ -80,7 +81,8 @@ class MetaOptimizer(nn.Module):
         flat_grads = preprocess_gradients(torch.cat(grads))
 
 #        inputs = Variable(torch.cat((flat_grads, flat_params.data), 1))
-        inputs = Variable(torch.cat((flat_grads, flat_params.data.unsqueeze(1)), 1))
+        inputs = Variable(
+            torch.cat((flat_grads, flat_params.data.unsqueeze(1)), 1))
 
         # Meta update itself
         flat_params = flat_params + self(inputs)
@@ -90,6 +92,7 @@ class MetaOptimizer(nn.Module):
         # Finally, copy values from the meta model to the normal one.
         self.meta_model.copy_params_to(model_with_grads)
         return self.meta_model.model
+
 
 class FastMetaOptimizer(nn.Module):
 
@@ -133,14 +136,16 @@ class FastMetaOptimizer(nn.Module):
         self.f = self.f.expand(flat_params.size(0), 1)
 
         loss = loss.expand_as(flat_grads)
-        inputs = Variable(torch.cat((preprocess_gradients(flat_grads), flat_params.data.unsqueeze(1), loss.unsqueeze(1)), 1))
+        inputs = Variable(torch.cat((preprocess_gradients(
+            flat_grads), flat_params.data.unsqueeze(1), loss.unsqueeze(1)), 1))
         inputs = torch.cat((inputs, self.f, self.i), 1)
         self.f, self.i = self(inputs)
 
         # Meta update itself
-        flat_params = torch.t(self.f) * flat_params - torch.t(self.i) * Variable(flat_grads)
-        if random.random() < 0.01:
-            print(self.f, self.i)
+        flat_params = torch.t(self.f) * flat_params - \
+            torch.t(self.i) * Variable(flat_grads)
+        # if random.random() < 0.01:
+        #     print(self.f, self.i)
 
         flat_params = flat_params.view(-1)
 
@@ -150,10 +155,13 @@ class FastMetaOptimizer(nn.Module):
         self.meta_model.copy_params_to(model_with_grads)
         return self.meta_model.model
 
+class AdamOptimizer(nn.Module):
+    pass
+
+
 # A helper class that keeps track of meta updates
 # It's done by replacing parameters with variables and applying updates to
 # them.
-
 
 class MetaModel:
 
