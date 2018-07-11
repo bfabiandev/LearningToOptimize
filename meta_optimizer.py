@@ -155,6 +155,10 @@ class FastMetaOptimizer(nn.Module):
         self.meta_model.copy_params_to(model_with_grads)
         return self.meta_model.model
 
+class AdamOptimizer(nn.Module):
+    pass
+
+
 # A helper class that keeps track of meta updates
 # It's done by replacing parameters with variables and applying updates to
 # them.
