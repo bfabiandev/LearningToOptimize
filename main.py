@@ -1,184 +1,118 @@
-import argparse
-import operator
-import sys
-
+import tensorflow as tf
+from optimizers import SGD, RMSprop, RNNOptimizer
+from problems import SimpleDG
+from models.linear_regression_model import LinearRegressionModel
+from trainers.linear_regression_trainer import LinearRegressionTrainer
+from utils.dirs import create_dirs
+from utils.logger import Logger
+import matplotlib.pyplot as plt
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.autograd import Variable
-
-from data import get_batch
-from meta_optimizer import FastMetaOptimizer, MetaModel, MetaOptimizer
-from model import MnistModel, LinearRegressionModel
-from utils import setup_data, setup_model, get_config
 
 
-# PARSE INPUT
-parser = argparse.ArgumentParser(description='PyTorch Meta Learning')
-parser.add_argument('--problem', type=str, default='mnist', metavar='XXX',
-                    help='select problem to learn (options: simple, mnist(default))')
-parser.add_argument('--batch_size', type=int, default=32, metavar='N',
-                    help='batch size (default: 32)')
-parser.add_argument('--optimizer_steps', type=int, default=100, metavar='N',
-                    help='number of meta optimizer steps (default: 100)')
-parser.add_argument('--truncated_bptt_step', type=int, default=20, metavar='N',
-                    help='step at which it truncates bptt (default: 20)')
-parser.add_argument('--updates_per_epoch', type=int, default=100, metavar='N',
-                    help='updates per epoch (default: 20)')
-parser.add_argument('--max_epoch', type=int, default=10000, metavar='N',
-                    help='number of epoch (default: 10000)')
-parser.add_argument('--hidden_size', type=int, default=10, metavar='N',
-                    help='hidden size of the meta optimizer (default: 10)')
-parser.add_argument('--num_layers', type=int, default=2, metavar='N',
-                    help='number of LSTM layers (default: 2)')
-parser.add_argument('--no-cuda', action='store_true', default=False,
-                    help='enables CUDA training')
-parser.add_argument('--load_from_path', type=str, default='n', metavar='PATH',
-                    help='load optimizer from specified path, loads latest if given "latest" (default: doesn\'t load)')
-parser.add_argument('--optimizer_type', type=str, default='fast', metavar='OPT',
-                    help='meta optimizer to use (options: fast (default), lstm)')
-args = parser.parse_args()
-args.cuda = not args.no_cuda and torch.cuda.is_available()
+def learn(optimizer, model, n_steps):
+    """Given an optimizer, this function returns a list of losses, which can be evaluated in a session.
 
-assert args.optimizer_steps % args.truncated_bptt_step == 0
+    Arguments:
+        optimizer {[type]} -- [description]
+        model {[type]} -- [description]
+
+    Returns:
+        [list] -- List of tensors containing the losses. 
+    """
+    # create model
+    x = model.create_problem(optimizer_name=optimizer.__class__.__name__)
+    states = None
+    for i in range(n_steps):
+        # get loss
+        loss = model.losses[i]
+        # get gradients wrt loss
+        grads = tf.gradients(loss, x)
+        grads = [tf.stop_gradient(g) for g in grads]
+
+        # create new model with updated weights
+        updates, states = optimizer.step(grads, states)
+        x = model.rollout(weights=x, updates=updates)
+
+    return model.losses
 
 
 def main():
-    # Create a meta optimizer that wraps a model into a meta model
-    # to keep track of the meta updates.
 
-    train_loader, test_loader = setup_data(args)
-    meta_model = setup_model(args)
+    config = {
+        "optimizer": "rnn",
+        "training_steps": 20,  # This is 100 in the paper
+        "learning_rate": 0.1,
+        "decay_rate": 0.99,
+        "layers": 2,
+        "hidden_size": 20,
+        "max_to_keep": 3,
+        "dim": 10,
+        "range_of_means": 10,
+        "range_of_stds": 10,
+        "summary_dir": "/summary",
+        "checkpoint_dir": "/data_ckpt",
+        "batch_size": 100
+    }
 
-    device = torch.device("cuda" if args.cuda else "cpu")
+    # create the experiments dirs
+    create_dirs([config["summary_dir"], config["checkpoint_dir"]])
+    # create tensorflow session
+    sess = tf.Session()
+    # create your data generator
+    data = SimpleDG(config)
 
-    meta_model.to(device)
+    # create an instance of the model you want
+    model = LinearRegressionModel(config)
+    # create tensorboard logger
+    # logger = Logger(sess, config)
+    # create trainer and pass all the previous components to it
+    # trainer = LinearRegressionTrainer(sess, model, data, config, logger)
 
-    optimizer_type = args.optimizer_type.lower()
-    if optimizer_type == 'fast':
-        meta_optimizer = FastMetaOptimizer(
-            MetaModel(meta_model), args.num_layers, args.hidden_size).to(device)
-    elif optimizer_type == 'lstm':
-        meta_optimizer = MetaOptimizer(
-            MetaModel(meta_model), args.num_layers, args.hidden_size).to(device)
-    else:
-        raise ValueError(
-            "{} is not a valid optimizer type.".format(optimizer_type))
+    sess.run(tf.global_variables_initializer())
 
-    optimizer = optim.Adam(meta_optimizer.parameters(), lr=1e-3)
+    if config["optimizer"] == "sgd":
+        optim = SGD(config)
+        losses = learn(optim, model, config["training_steps"])
+    elif config["optimizer"] == "rms":
+        optim = RMSprop(config)
+        losses = learn(optim, model, config["training_steps"])
+    elif config["optimizer"] == "rnn":
+        optim = RNNOptimizer(config)
+        losses = learn(optim, model, config["training_steps"])
+        optim.train(losses, sess, data)
 
-    for epoch in range(args.max_epoch):
-        decrease_in_loss = 0.0
-        final_loss = 0.0
-        train_iter = iter(train_loader)
-        for _ in range(args.updates_per_epoch):
-            # Sample a new model
-            # if args.problem == 'mnist':
-            #     model = MnistModel().to(device)
-            # elif args.problem == 'simple':
-            #     train_loader, test_loader = setup_data(args)
-            #     model = 
-            # else:
-            #     raise ValueError(
-            #         "{} is not a valid problem.".format(args.problem))
-                    
+    x = np.arange(config["training_steps"] + 1)
 
-            train_loader, test_loader = setup_data(args)
-            model = setup_model(args)
-            model.to(device)
+    for _ in range(3):
+        data_x, data_y = next(data.next_batch(config["batch_size"]))
 
-            try:
-                x, y = next(train_iter)
-            except StopIteration:
-                train_iter = iter(train_loader)
-                x, y = next(train_iter)
+        l = sess.run([losses], feed_dict={
+                     "input:0": data_x, "label:0": data_y})
+        print(l)
 
-            x, y = x.to(device), y.to(device)
+        p1, = plt.plot(x, l[0], label=config["optimizer"])
+        plt.legend(handles=[p1])
+        plt.title('Losses')
+        plt.show()
 
+        # TODO compare different optimizers
 
-            # Compute initial loss of the model
-            f_x = model(x)
+    # for _ in range(3):
+    #     sgd_l, rms_l, rnn_l = sess.run(
+    #         [sgd_losses, rms_losses, rnn_losses])
+    #     p1, = plt.plot(x, sgd_l, label='SGD')
+    #     p2, = plt.plot(x, rms_l, label='RMS')
+    #     p3, = plt.plot(x, rnn_l, label='RNN')
+    #     plt.legend(handles=[p1, p2, p3])
+    #     plt.title('Losses')
+    #     plt.show()
 
-            if args.problem == 'mnist':
-                initial_loss = F.nll_loss(f_x, y)
-            elif args.problem == 'simple':
-                initial_loss = F.binary_cross_entropy_with_logits(
-                    f_x, y.float())
-            else:
-                raise ValueError(
-                    "{} is not a valid problem.".format(args.problem))
-
-            for k in range(args.optimizer_steps // args.truncated_bptt_step):
-                # Keep states for truncated BPTT
-                meta_optimizer.reset_lstm(
-                    keep_states=k > 0, model=model, use_cuda=args.cuda)
-
-                loss_sum = 0
-                prev_loss = torch.zeros(1)
-                prev_loss = prev_loss.to(device)
-                for _ in range(args.truncated_bptt_step):
-                    try:
-                        x, y = next(train_iter)
-                    except StopIteration:
-                        train_iter = iter(train_loader)
-                        x, y = next(train_iter)
-
-                    x, y = x.to(device), y.to(device)
-
-                    # First we need to compute the gradients of the model
-                    f_x = model(x)                  # forward propagation
-
-                    # calculate loss
-                    if args.problem == 'mnist':
-                        loss = F.nll_loss(f_x, y)
-                    elif args.problem == 'simple':
-                        loss = F.binary_cross_entropy_with_logits(
-                            f_x, y.float())
-                    else:
-                        raise ValueError(
-                            "{} is not a valid problem.".format(args.problem))
-
-                    model.zero_grad()               # set gradients of all params to zero
-                    loss.backward()                 # calculate gradients
-
-                    # Perfom a meta update using gradients from modelate using gradients from model
-                    # and return the current meta model saved in the optimizer
-                    meta_model = meta_optimizer.meta_update(model, loss.data)
-
-                    # Compute a loss for a step the meta optimizer
-                    f_x = meta_model(x)
-
-                    if args.problem == 'mnist':
-                        loss = F.nll_loss(f_x, y)
-                    elif args.problem == 'simple':
-                        loss = F.binary_cross_entropy_with_logits(
-                            f_x, y.float())
-                    else:
-                        raise ValueError(
-                            "{} is not a valid problem.".format(args.problem))
-
-                    loss_sum += (loss - Variable(prev_loss))
-
-                    prev_loss = loss.data
-
-                # Update the parameters of the meta optimizer
-                meta_optimizer.zero_grad()
-                loss_sum.backward()
-                for param in meta_optimizer.parameters():
-                    param.grad.data.clamp_(-1, 1)
-
-                optimizer.step()
-
-            # Compute relative decrease in the loss function w.r.t initial
-            # value
-            decrease_in_loss += loss.item() / initial_loss.item()
-            final_loss += loss.item()
-            print(loss.item())
-
-        print("Epoch: {}, final loss {}, average final/initial loss ratio: {}".format(epoch, final_loss / args.updates_per_epoch,
-                                                                                      decrease_in_loss / args.updates_per_epoch))
+    #     p1, = plt.semilogy(x, sgd_l, label='SGD')
+    #     p2, = plt.semilogy(x, rms_l, label='RMS')
+    #     p3, = plt.semilogy(x, rnn_l, label='RNN')
+    #     plt.legend(handles=[p1, p2, p3])
+    #     plt.title('Losses')
+    #     plt.show()
 
 
 if __name__ == "__main__":
