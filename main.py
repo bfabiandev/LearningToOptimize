@@ -1,6 +1,6 @@
 import tensorflow as tf
 from optimizers import SGD, RMSprop, RNNOptimizer
-from problems import SimpleDG
+from data_loader.data_generator import SimpleDG
 from models.linear_regression_model import LinearRegressionModel
 from trainers.linear_regression_trainer import LinearRegressionTrainer
 from utils.dirs import create_dirs
@@ -81,14 +81,16 @@ def main():
         losses = learn(optim, model, config["training_steps"])
         optim.train(losses, sess, data)
 
+    sess.run(tf.variables_initializer([var for var in tf.trainable_variables(scope=optim.__class__.__name__)]))
+
     x = np.arange(config["training_steps"] + 1)
 
-    for _ in range(3):
+    for i in range(3):
+        data.refresh_parameters(seed=i)
         data_x, data_y = next(data.next_batch(config["batch_size"]))
 
         l = sess.run([losses], feed_dict={
                      "input:0": data_x, "label:0": data_y})
-        print(l)
 
         p1, = plt.plot(x, l[0], label=config["optimizer"])
         plt.legend(handles=[p1])

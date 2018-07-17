@@ -70,6 +70,8 @@ class RNNOptimizer(BaseOptimizer):
 
         ave = 0
         for i in range(training_iters):
+            data.refresh_parameters()
+            
             data_x, data_y = next(data.next_batch(self.config["batch_size"]))
     
             err, _ = sess.run([sum_losses, apply_update], feed_dict={"input:0" : data_x, "label:0" : data_y})
