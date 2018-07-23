@@ -9,10 +9,11 @@ python main.py
 ### TODO
 - [ ] Initial implementation of learning to optimize neural networks by gradient descent by gradient descent
     - [x] RNN optimizer
-    - [ ] Preprocessing gradients
+    - [x] Preprocessing gradients
+    - [ ] Evaluating against other optimizers
 - [ ] Adding different problems
     - [x] Simple classification of two gaussians
-    - [ ] MNIST 
+    - [x] MNIST 
     - [ ] Cifar-10 with convolutional networks
 - [ ] Compare with standard optimizers
     - [x] SGD
@@ -21,4 +22,4 @@ python main.py
     - [ ] LBFGS
 - [ ] Add RL optimizer - Policy Gradient
 - [ ] Add parameter options
-- [ ] Save and load weights for meta-optimizer
+- [x] Save and load weights for meta-optimizer

@@ -22,10 +22,11 @@ class LinearRegressionModel(BaseModel):
         # tf.set_random_seed(0)
 
         self.x = tf.placeholder(
-            tf.float32, shape=[None] + [self.config["dim"]], name="input")
+            tf.float32, shape=[None, self.config["dim"]], name="input")
         self.y = tf.placeholder(tf.float32, shape=[None, 1], name="label")
 
         self.losses = []
+        self.accuracy = None
 
     def init_saver(self):
         self.saver = tf.train.Saver(max_to_keep=self.config["max_to_keep"])
@@ -46,15 +47,14 @@ class LinearRegressionModel(BaseModel):
             b = tf.get_variable(
                 shape=[1], initializer=tf.glorot_uniform_initializer(), name="bias")
 
-            weights = [W, b]
             pred = tf.add(tf.matmul(self.x, W), b)
 
         self.losses.append(tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=pred)))
 
-        return weights
+        return [W, b]
 
-    def rollout(self, updates, weights):
+    def rollout(self, updates, weights, iteration):
         """Does one step of the rollout - creates new instance of the problem 
         where the weights are created by applying updates calculated by the optimizer.
 
@@ -66,10 +66,16 @@ class LinearRegressionModel(BaseModel):
             weights {list} -- Returns ops to calculate the new weights.
         """
 
-        weights = [update + var for update, var in zip(updates, weights)]
+        weights = [var + update for update, var in zip(updates, weights)]
         pred = tf.add(tf.matmul(self.x, weights[0]), weights[1])
 
         self.losses.append(tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(labels=self.y, logits=pred)))
+
+        if iteration == self.config["rollout_length"]:
+            self.prediction = tf.round(tf.sigmoid(pred))
+            correct_prediction = tf.equal(self.prediction, self.y)
+            self.accuracy = tf.reduce_mean(
+                tf.cast(correct_prediction, tf.float32))
 
         return weights

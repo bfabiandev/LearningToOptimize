@@ -110,3 +110,6 @@ experiments/
 .vscode/settings.json
 meta_learning.py
 pytorch/
+summary/
+MNIST_data/
+data_ckpt/
